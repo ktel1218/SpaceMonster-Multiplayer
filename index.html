@@ -1,0 +1,341 @@
+<!doctype html>
+<html>
+  <head>
+    <script src='https://cdn.firebase.com/js/client/2.2.1/firebase.js'></script>
+    <script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js'></script>
+    <!-- <link rel='stylesheet' type='text/css' href='/resources/tutorial/css/example.css'> -->
+  </head>
+  <body>
+    <canvas id='canvas'></canvas>
+    <!-- <div id='messagesDiv'></div> -->
+    <!-- <input type='text' id='nameInput' placeholder='Name'> -->
+    <!-- <input type='text' id='messageInput' placeholder='Message'> -->
+    <script>
+
+
+        var myDataRef = new Firebase('https://veriz4n9g34.firebaseio-demo.com/');
+        myDataRef.onDisconnect().remove();
+
+        var player1;
+        var defaultMaxSpeed = 300;
+        var global_sprites = {};
+        var particles = [];
+        var world = {
+            "width": 1000,
+            "height": 1000
+        }
+
+        var canvas = document.getElementById('canvas');
+        var context = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        var cursor = {
+            "x": 0,
+            "y": 0,
+        };
+    
+
+        this.onmousemove = function (e) {
+            cursor.x = e.pageX;
+            cursor.y = e.pageY;
+        };
+
+
+        //////////////////////////  PLAYER   /////////////////////////////
+
+
+
+        function ActivePlayer(x, y, radius) {
+            this.id = ( Math.random() * 100000 ) | 0
+            this.maxSpeed = defaultMaxSpeed;
+            // this.nearbySprites = [];
+            this.x = x | 0;
+            this.y = y | 0;
+            this.radius = radius;
+            this.speed = 0;
+            // this.influenceRadius = radius * 4 * (this.speed + 20);
+            this.displayX = canvas.width / 2;
+            this.displayY = canvas.height / 2;
+
+            return this;
+        }
+
+        // ActivePlayer.prototype.updateDisplay = function () {
+
+        //     this.displayX = canvas.width / 2;
+        //     this.displayY = canvas.height / 2;
+        // };
+
+        ActivePlayer.prototype.step = function () {
+            // this.onCollisionDetect(this.nearbySprites);
+            this.move();
+            obj = {}
+            obj["" + this.id] = {
+                    id: this.id,
+                    x: this.x, 
+                    y: this.y, 
+                    radius: this.radius
+                }
+            myDataRef.update(obj);
+
+        };
+
+        ActivePlayer.prototype.move = function () {
+
+
+
+            this.velocity = getDirectionTo(this.x, this.y, cursor.x, cursor.y);
+            this.speed = getMagnitude(this.velocity);
+
+
+            this.maxSpeed = defaultMaxSpeed;
+
+            //do not exceed max speed
+            if (this.speed > this.maxSpeed) {
+                this.speed = this.maxSpeed;
+                this.velocity = normalize(this.velocity);
+                this.velocity.x *= this.speed;
+                this.velocity.y *= this.speed;
+            }
+
+            // player is never directly at cursor!
+            if (this.speed > 1) {
+                this.x += this.velocity.x / 18;
+                this.y += this.velocity.y / 18;
+            //if player is within 1 px of cursor, stop.
+            }
+
+            // wall collision
+
+            if (this.x - this.radius <= 0) this.x = 0 + this.radius;
+            if (this.x + this.radius >= world.width) this.x = world.width - this.radius;
+            if (this.y - this.radius <= 0) this.y = 0 + this.radius;
+            if (this.y + this.radius >= world.height) this.y = world.height - this.radius;
+
+        };
+
+        ActivePlayer.prototype.draw = function () {
+
+            var color = "rgba(220,220,220,.85)";
+
+            context.beginPath();
+            context.fillStyle = color;
+            context.arc(this.displayX, this.displayY, this.radius, 0, Math.PI * 2, true);
+            // context.arc(this.x, this.y, this.radius, 0, Math.PI * 2, true);
+            context.fill();
+
+        };
+
+
+        function Circle(x, y, radius, layer) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.layer = layer;
+                return this;
+            }
+
+        Circle.prototype.draw = function () {
+            var displayX = this.x - (player1.x * this.layer);
+            var displayY = this.y - (player1.y * this.layer);
+            var displayRadius = this.radius * this.layer;
+            context.fillStyle = "rgba(0, 200, 100, " + 1 / (this.layer * 2) + ")";
+            context.beginPath();
+            context.arc(displayX, displayY, displayRadius, 0, Math.PI * 2, true);
+            context.fill();
+        };
+
+
+        // function OtherPlayer(x, y, id, radius) {
+        //     this.id = id
+        //     this.x = x;
+        //     this.y = y;
+        //     this.radius = radius;
+        //     this.displayX = canvas.width / 2;
+        //     this.displayY = canvas.height / 2;
+
+        //     return this;
+        // }
+
+    //////////////////////////   MATH   ///////////////////////////////
+
+
+
+
+
+        function getMagnitude(vector) {
+            var x = vector.x;
+            var y = vector.y;
+            var n = Math.sqrt(x * x + y * y);
+            return Math.abs(n);
+        }
+
+        function getDirectionTo(x1, y1, x2, y2) {
+            var deltaY = y2 - y1;
+            var deltaX = x2 - x1;
+
+            var direction = {
+                "x": deltaX,
+                "y": deltaY,
+            };
+            return direction;
+        }
+
+        function sumVectors(listOfVectors) {
+            var sumX = 0;
+            var sumY = 0;
+            for (var i = 0; i < listOfVectors.length; i++) {
+                sumX += listOfVectors[i].x;
+                sumY += listOfVectors[i].y;
+            }
+            var summedVector = {
+                "x": sumX,
+                "y": sumY,
+            };
+            return summedVector;
+        }
+
+        function normalize(vector) {
+            //make a unit vector
+            var length = getMagnitude(vector);
+            var normalizedVector = {
+                "x": (vector.x / length),
+                "y": (vector.y / length),
+            };
+            return normalizedVector;
+        }
+
+
+
+
+        function prepCanvas() {
+            //set background color, clears before each frame
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = "black";
+            context.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function loop() {
+            prepCanvas();
+            animate();
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        function init() {
+
+            //intialize player
+            player1 = new ActivePlayer(world.width / 2, world.height / 2, 20);
+            makeParticles();
+        }
+
+        function makeParticles() {
+                for (var i = 0; i < world.width / 16; i++) {
+                    var foreLayer = 1 + Math.random() * 5; // foreground depth index(1 - 5)
+                    var foresquare = new Circle(
+                        canvas.width / 2 + Math.random() * world.width * foreLayer,
+                        canvas.height / 2 + Math.random() * world.height * foreLayer,
+                        5, foreLayer);
+                    particles.push(foresquare);
+                }
+                for (var j = 0; j < world.width / 16; j++) {
+                    var backLayer = 0.2 + Math.random() * 0.4; // background index (.2 - .4)
+                    var backsquare = new Circle(
+                        canvas.width / 2 + Math.random() * world.width * backLayer,
+                        canvas.height / 2 + Math.random() * world.height * backLayer,
+                        5, backLayer);
+                    particles.push(backsquare);
+                }
+            }
+
+
+        function animate() {
+            player1.step();
+        }
+
+        function render() {
+
+            for (var id in global_sprites) {
+              if (global_sprites.hasOwnProperty(id)) {
+                if (id != player1.id) {
+                    draw(global_sprites[id]);
+                }else{
+                    player1.draw()
+                }
+              }
+            }
+
+            for (var j = 0; j < particles.length; j++) {
+                particles[j].draw();
+            }
+        }
+
+        draw = function (obj) {
+
+            var color = "rgba(220,220,220,.85)";
+
+            context.beginPath();
+            context.fillStyle = color;
+            var displayX = player1.displayX + (obj.x - player1.x);
+            var displayY = player1.displayY + (obj.y - player1.y);
+            context.arc(displayX, displayY, obj.radius, 0, Math.PI * 2, true);
+            context.fill();
+
+        };
+
+        var onComplete = function(error) {
+            if (error) {
+                console.log('Synchronization failed');
+            } else {
+                console.log('Synchronization succeeded');
+            }
+        };
+
+        // myDataRef.remove(onComplete);
+
+        myDataRef.on('child_removed', function(oldPlayerSnapshot) {
+            var player = oldPlayerSnapshot.val();
+            delete global_sprites[player.id]
+        });
+
+        
+
+        myDataRef.on('child_changed', function(playerSnapshot) {
+            var player = playerSnapshot.val();
+            global_sprites[player.id] = player
+        });
+
+        init();
+        loop();
+
+
+        myDataRef.once('value', function(playerSnapshot) {
+            var players = playerSnapshot.val();
+            console.log(players);
+            global_sprites = players;
+            console.log(player1.id);
+        });
+
+
+      // var myDataRef = new Firebase('https://jbmt9mhlyjy.firebaseio-demo.com/');
+      // $('#messageInput').keypress(function (e) {
+      //   if (e.keyCode == 13) {
+      //     var name = $('#nameInput').val();
+      //     var text = $('#messageInput').val();
+      //     myDataRef.push({name: name, text: text});
+      //     $('#messageInput').val('');
+      //   }
+      // });
+      // myDataRef.on('child_added', function(snapshot) {
+      //   var message = snapshot.val();
+      //   displayChatMessage(message.name, message.text);
+      // });
+      // function displayChatMessage(name, text) {
+      //   $('<div/>').text(text).prepend($('<em/>').text(name+': ')).appendTo($('#messagesDiv'));
+      //   $('#messagesDiv')[0].scrollTop = $('#messagesDiv')[0].scrollHeight;
+      // };
+    </script>
+  </body>
+</html>
